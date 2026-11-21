@@ -390,6 +390,13 @@
     }
     function goResult(){
       var city=selectedCity();
+      try{
+        fetch(API + '/public/acesso', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ page: 'home', cidade: city })
+        }).catch(function(){});
+      }catch(e){}
       if(overlay){ overlay.style.opacity='1'; overlay.style.visibility='visible'; overlay.style.pointerEvents='auto'; }
       setTimeout(function(){
         if(overlay){ overlay.style.opacity=''; overlay.style.visibility=''; overlay.style.pointerEvents=''; }
@@ -574,25 +581,18 @@
     if(copyBtn){
       copyBtn.addEventListener('click', function(){
         if(!currentCode) return;
-        var done = function(){ var old = copyBtn.innerHTML; copyBtn.innerHTML = '✓ Pix copiado!'; setTimeout(function(){ copyBtn.innerHTML = old; }, 1800); };
-        if(currentId){ fetch(API + '/public/pix-copiado', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: currentId }) }).catch(function(){}); }
-        if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(currentCode).then(done).catch(function(){ done(); }); }
-        else { var ta = document.createElement('textarea'); ta.value = currentCode; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); }catch(e){} document.body.removeChild(ta); done(); }
+        var done = function(){
+          var old = copyBtn.innerHTML; copyBtn.innerHTML = '✓ Pix copiado!'; setTimeout(function(){ copyBtn.innerHTML = old; }, 1800);
+          if(currentId){ fetch(API + '/public/pix-copiado', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: currentId }) }).catch(function(){}); }
+        };
+        if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(currentCode).then(done).catch(function(){}); }
+        else { var ta = document.createElement('textarea'); ta.value = currentCode; document.body.appendChild(ta); ta.select(); var ok=false; try{ ok=document.execCommand('copy'); }catch(e){} document.body.removeChild(ta); if(ok) done(); }
       });
     }
 
     // Normalize to the consulta route on first load
     if(!window.location.hash){ try{ window.location.replace(window.location.pathname + '#/consulta'); }catch(e){ window.location.hash = '#/consulta'; } }
     applyRoute();
-
-    // Register a public access so the admin panel's real-time activity counts it.
-    try{
-      fetch(API + '/public/acesso', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ page: 'home' })
-      }).catch(function(){});
-    }catch(e){}
   }
   if(document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', init); } else { init(); }
 })();
