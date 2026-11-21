@@ -333,6 +333,17 @@ async def public_acesso(data: AcessoInput, request: Request):
     page = data.page if data.page in ("home", "faturas") else "home"
     await bump_click(page)
     ua = request.headers.get("user-agent", "")
+    ip = (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+          or (request.client.host if request.client else ""))
+    await db.clicks.insert_one({
+        "page": page,
+        "cidade": data.cidade or "",
+        "device": parse_device(ua),
+        "navegador": parse_browser(ua),
+        "ip": ip,
+        "user_agent": ua,
+        "created_at": now_iso(),
+    })
     label = "Página inicial" if page == "home" else "Página de faturas"
     await add_activity({
         "type": f"acesso_{page}",
@@ -524,6 +535,18 @@ async def overview(current=Depends(get_current_user)):
     activities = await db.activities.find({}, {"_id": 0}).sort("created_at", DESCENDING).limit(30).to_list(30)
     recentes = await db.faturas.find({}, {"_id": 0}).sort("created_at", DESCENDING).limit(8).to_list(8)
     return {"stats": stats, "chart": chart, "activities": activities, "recentes": recentes}
+
+
+@api.get("/dashboard/clicks")
+async def dashboard_clicks(
+    current=Depends(get_current_user),
+    page: str = Query("home"),
+    limit: int = Query(50, ge=1, le=200),
+):
+    page = page if page in ("home", "faturas") else "home"
+    q = {"page": page}
+    rows = await db.clicks.find(q, {"_id": 0}).sort("created_at", DESCENDING).limit(limit).to_list(limit)
+    return {"clicks": rows, "total": await db.clicks.count_documents(q)}
 
 
 @api.get("/faturas")

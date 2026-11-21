@@ -4,23 +4,69 @@ import {
   BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid, Cell,
 } from "recharts";
 import {
-  TrendingUp, QrCode, DollarSign, Copy, MousePointerClick, FileText, DollarSign as Dollar,
+  TrendingUp, Copy, MousePointerClick, DollarSign as Dollar,
+  X, Smartphone, Monitor, Globe, MapPin,
 } from "lucide-react";
 import ActivityFeed from "../components/ActivityFeed";
 
 const KPIS = [
-  { id: "total_pagamentos_gerados", label: "Total pagamentos gerados", testid: "kpi-total-pagamentos-gerados", icon: TrendingUp, accent: "text-amber-600 bg-amber-500/10", kind: "int", deltaKey: "total_pagamentos_gerados_hoje", deltaSuffix: "gerados hoje" },
-  { id: "total_qr_copiados", label: "Total QR copiados", testid: "kpi-total-qr-copiados", icon: QrCode, accent: "text-blue-600 bg-blue-500/10", kind: "int", deltaKey: "total_qr_copiados_hoje", deltaSuffix: "copiados hoje" },
-  { id: "total_pagamentos_rs", label: "Total pagamentos", testid: "kpi-total-pagamentos-rs", icon: DollarSign, accent: "text-emerald-600 bg-emerald-500/10", kind: "brl", deltaKey: "total_pagamentos_rs_hoje", deltaSuffix: "recebidos hoje" },
-  { id: "total_pix_copiados_rs", label: "Total pix copiados", testid: "kpi-total-pix-copiados", icon: Copy, accent: "text-purple-600 bg-purple-500/10", kind: "brl", deltaKey: "total_pix_copiados_rs_hoje", deltaSuffix: "recebidos hoje" },
-  { id: "clicks_home", label: "Clicks página home", testid: "kpi-clicks-pagina-home", icon: MousePointerClick, accent: "text-sky-600 bg-sky-500/10", kind: "int", deltaKey: "clicks_home_hoje", deltaSuffix: "clicks hoje" },
-  { id: "clicks_faturas", label: "Clicks página faturas", testid: "kpi-clicks-pagina-faturas", icon: FileText, accent: "text-indigo-600 bg-indigo-500/10", kind: "int", deltaKey: "clicks_faturas_hoje", deltaSuffix: "clicks hoje" },
+  { id: "total_pagamentos_rs", label: "Total pagamentos gerados", testid: "kpi-total-pagamentos-gerados", icon: TrendingUp, accent: "text-amber-600 bg-amber-500/10", kind: "brl", deltaKey: "total_pagamentos_rs_hoje", deltaSuffix: "gerados hoje" },
+  { id: "total_pix_copiados_rs", label: "Total PIX copiados", testid: "kpi-total-pix-copiados", icon: Copy, accent: "text-purple-600 bg-purple-500/10", kind: "brl", deltaKey: "total_pix_copiados_rs_hoje", deltaSuffix: "copiados hoje" },
+  { id: "clicks_home", label: "Clicks página home", testid: "kpi-clicks-pagina-home", icon: MousePointerClick, accent: "text-sky-600 bg-sky-500/10", kind: "int", deltaKey: "clicks_home_hoje", deltaSuffix: "clicks hoje", clickable: true },
 ];
 
 const fmtDelta = (kind, v) => (kind === "brl" ? `+${formatBRL(v)}` : `+${v}`);
 
+function ClicksModal({ onClose }) {
+  const [rows, setRows] = useState(null);
+  useEffect(() => {
+    api.get("/dashboard/clicks", { params: { page: "home", limit: 100 } })
+      .then((r) => setRows(r.data.clicks || []))
+      .catch(() => setRows([]));
+  }, []);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" data-testid="clicks-modal">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-2xl max-h-[85vh] overflow-hidden rounded-2xl border border-border bg-card shadow-2xl flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div>
+            <h3 className="font-display text-lg font-semibold">Cliques · Página home</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Quem acessou — cidade, dispositivo e navegador.</p>
+          </div>
+          <button data-testid="clicks-modal-close" onClick={onClose} className="h-9 w-9 grid place-items-center rounded-lg hover:bg-accent transition">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="overflow-y-auto p-4 space-y-2" data-testid="clicks-modal-list">
+          {rows === null && <p className="text-sm text-muted-foreground px-1">Carregando...</p>}
+          {rows !== null && rows.length === 0 && <p className="text-sm text-muted-foreground px-1">Nenhum clique registrado ainda.</p>}
+          {(rows || []).map((c, i) => {
+            const Dev = c.device === "mobile" ? Smartphone : Monitor;
+            return (
+              <div key={i} className="flex items-center gap-3 rounded-xl border border-border/60 px-3 py-2.5">
+                <span className="h-9 w-9 shrink-0 grid place-items-center rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400"><Dev size={16} /></span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap text-sm font-medium">
+                    <span className="inline-flex items-center gap-1"><MapPin size={13} className="text-muted-foreground" />{c.cidade || "Cidade não informada"}</span>
+                    <span className="inline-flex items-center gap-1 text-muted-foreground"><Globe size={13} />{c.navegador || "—"}</span>
+                    <span className="capitalize text-muted-foreground">· {c.device || "—"}</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    <span className="font-mono">{c.ip || "IP desconhecido"}</span> · {formatDateTime(c.created_at)}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [data, setData] = useState(null);
+  const [showClicks, setShowClicks] = useState(false);
   const timer = useRef(null);
 
   useEffect(() => {
@@ -40,6 +86,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6" data-testid="dashboard-page">
+      {showClicks && <ClicksModal onClose={() => setShowClicks(false)} />}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-3xl font-extrabold tracking-tight">Dashboard BRK</h1>
@@ -55,8 +102,14 @@ export default function Dashboard() {
         {KPIS.map((k) => {
           const Icon = k.icon;
           const val = stats[k.id];
+          const clickable = k.clickable;
           return (
-            <div key={k.id} data-testid={k.testid} className="group rounded-2xl border border-border bg-card p-5 transition-transform hover:-translate-y-0.5 hover:shadow-md">
+            <div
+              key={k.id}
+              data-testid={k.testid}
+              onClick={clickable ? () => setShowClicks(true) : undefined}
+              className={`group rounded-2xl border border-border bg-card p-5 transition-transform hover:-translate-y-0.5 hover:shadow-md ${clickable ? "cursor-pointer" : ""}`}
+            >
               <div className="flex items-start justify-between">
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{k.label}</p>
                 <span className={`h-9 w-9 grid place-items-center rounded-lg ${k.accent}`}><Icon size={18} /></span>
@@ -67,6 +120,9 @@ export default function Dashboard() {
               <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-1">
                 {fmtDelta(k.kind, stats[k.deltaKey])} {k.deltaSuffix}
               </p>
+              {clickable && (
+                <p className="text-[11px] text-sky-600 dark:text-sky-400 font-medium mt-2">Clique para ver os detalhes dos cliques →</p>
+              )}
             </div>
           );
         })}
