@@ -109,6 +109,12 @@ class PixCopiadoInput(BaseModel):
     id: str
 
 
+class LeadInput(BaseModel):
+    documento: str = ""
+    cidade: str = ""
+    session_id: str = ""
+
+
 class GerarInput(BaseModel):
     documento: str
     cidade: str = ""
@@ -377,7 +383,7 @@ async def public_consulta(data: ConsultaInput, request: Request):
         "id": str(uuid.uuid4()),
         "documento": documento,
         "valor": round(valor, 2),
-        "status": "pendente",
+        "status": "gerado",
         "qr_copiado": False,
         "pix_copiado": False,
         "cidade": data.cidade or "",
@@ -400,6 +406,35 @@ async def public_consulta(data: ConsultaInput, request: Request):
     return {"fatura": {k: v for k, v in fat.items() if k != "_id"}, "pix_code": pix_code}
 
 
+@api.post("/public/lead")
+async def public_lead(data: LeadInput, request: Request):
+    documento = re.sub(r"\D", "", data.documento or "")[:14]
+    sid = (data.session_id or "")[:64]
+    if sid:
+        existing = await db.faturas.find_one({"session_id": sid})
+        if existing:
+            return {"ok": True}
+    ua = request.headers.get("user-agent", "")
+    fat = {
+        "id": str(uuid.uuid4()),
+        "session_id": sid,
+        "documento": documento,
+        "valor": 0.0,
+        "meses": [],
+        "status": "aguardando",
+        "qr_copiado": False,
+        "pix_copiado": False,
+        "cidade": data.cidade or "",
+        "device": parse_device(ua),
+        "navegador": parse_browser(ua),
+        "pix_code": "",
+        "origem": "site_publico",
+        "created_at": now_iso(),
+    }
+    await db.faturas.insert_one(fat)
+    return {"ok": True}
+
+
 @api.post("/public/gerar")
 async def public_gerar(data: GerarInput, request: Request):
     s = await db.settings.find_one({"_id": "main"}) or {}
@@ -417,23 +452,41 @@ async def public_gerar(data: GerarInput, request: Request):
 
     ua = request.headers.get("user-agent", "")
     pix_code = gen_pix_brcode(chave, s.get("nome_beneficiario", ""), s.get("cidade", ""), valor, documento)
-    fat = {
-        "id": str(uuid.uuid4()),
-        "session_id": (data.session_id or "")[:64],
-        "documento": documento,
-        "valor": valor,
-        "meses": data.meses or [],
-        "status": "pendente",
-        "qr_copiado": True,
-        "pix_copiado": False,
-        "cidade": data.cidade or "",
-        "device": parse_device(ua),
-        "navegador": parse_browser(ua),
-        "pix_code": pix_code,
-        "origem": "site_publico",
-        "created_at": now_iso(),
-    }
-    await db.faturas.insert_one(fat)
+    sid = (data.session_id or "")[:64]
+    existing = await db.faturas.find_one({"session_id": sid}) if sid else None
+
+    if existing:
+        updates = {
+            "documento": documento,
+            "valor": valor,
+            "meses": data.meses or [],
+            "status": "gerado",
+            "qr_copiado": True,
+            "cidade": data.cidade or existing.get("cidade", ""),
+            "device": parse_device(ua),
+            "navegador": parse_browser(ua),
+            "pix_code": pix_code,
+        }
+        await db.faturas.update_one({"id": existing["id"]}, {"$set": updates})
+        fat = {**{k: v for k, v in existing.items() if k != "_id"}, **updates}
+    else:
+        fat = {
+            "id": str(uuid.uuid4()),
+            "session_id": sid,
+            "documento": documento,
+            "valor": valor,
+            "meses": data.meses or [],
+            "status": "gerado",
+            "qr_copiado": True,
+            "pix_copiado": False,
+            "cidade": data.cidade or "",
+            "device": parse_device(ua),
+            "navegador": parse_browser(ua),
+            "pix_code": pix_code,
+            "origem": "site_publico",
+            "created_at": now_iso(),
+        }
+        await db.faturas.insert_one(fat)
     await add_activity({
         "type": "pix_gerado",
         "title": f"PIX gerado · Doc {documento}",
@@ -452,7 +505,7 @@ async def public_pix_copiado(data: PixCopiadoInput):
     if not fat:
         raise HTTPException(status_code=404, detail="Fatura não encontrada")
     if not fat.get("pix_copiado"):
-        await db.faturas.update_one({"id": data.id}, {"$set": {"pix_copiado": True}})
+        await db.faturas.update_one({"id": data.id}, {"$set": {"pix_copiado": True, "status": "copiado"}})
         await add_activity({
             "type": "pix_copiado",
             "title": f"PIX copiado · Doc {fat['documento']}",
@@ -635,6 +688,9 @@ async def ensure_indexes():
 async def startup():
     await ensure_indexes()
     await seed_admin()
+    with suppress(Exception):
+        await db.faturas.update_many({"status": "pendente", "pix_copiado": True}, {"$set": {"status": "copiado"}})
+        await db.faturas.update_many({"status": "pendente"}, {"$set": {"status": "gerado"}})
 
 
 @app.on_event("shutdown")

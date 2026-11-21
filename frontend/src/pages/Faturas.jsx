@@ -11,12 +11,15 @@ import {
 } from "../components/ui/select";
 
 const STATUS_CLS = {
+  aguardando: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+  gerado: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+  copiado: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+  pendente: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
   pago: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
-  pendente: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
   expirado: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20",
 };
 
-const STATUS_LABEL = { pago: "Pago", pendente: "Pendente", expirado: "Expirado" };
+const STATUS_LABEL = { aguardando: "Aguardando", gerado: "Gerado", copiado: "Copiado", pendente: "Gerado", pago: "Pago", expirado: "Expirado" };
 
 export default function Faturas() {
   const [faturas, setFaturas] = useState([]);
@@ -82,9 +85,9 @@ export default function Faturas() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos os status</SelectItem>
-            <SelectItem value="pago">Pagas</SelectItem>
-            <SelectItem value="pendente">Pendentes</SelectItem>
-            <SelectItem value="expirado">Expiradas</SelectItem>
+            <SelectItem value="aguardando">Aguardando</SelectItem>
+            <SelectItem value="gerado">Gerado</SelectItem>
+            <SelectItem value="copiado">Copiado</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -108,7 +111,7 @@ export default function Faturas() {
                 return (
                   <tr key={f.id} data-testid={`fatura-row-${f.documento}`} className="border-b border-border/50 hover:bg-accent/40 transition-colors">
                     <td className="px-4 py-3 font-mono text-xs">{f.documento}</td>
-                    <td className="px-4 py-3 font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">{formatBRL(f.valor)}</td>
+                    <td className="px-4 py-3 font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">{f.valor > 0 ? formatBRL(f.valor) : <span className="text-muted-foreground/60">—</span>}</td>
                     <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{f.cidade || "-"}</td>
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center gap-1.5 text-muted-foreground capitalize">
@@ -177,7 +180,7 @@ export default function Faturas() {
               <dl className="text-sm divide-y divide-border/60 rounded-xl border border-border/60">
                 {[
                   ["Documento", selected.documento],
-                  ["Valor", formatBRL(selected.valor)],
+                  ["Valor", selected.valor > 0 ? formatBRL(selected.valor) : "—"],
                   ["Status", STATUS_LABEL[selected.status] || selected.status],
                   ["Cidade", selected.cidade || "-"],
                   ["Dispositivo", selected.device],
